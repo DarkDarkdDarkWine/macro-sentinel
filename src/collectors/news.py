@@ -161,7 +161,14 @@ class NewsCollector:
         response = self._get_with_retry(GDELT_API_URL, params=params)
         response.raise_for_status()
 
-        raw_articles: list[dict] = response.json().get("articles", [])
+        # GDELT occasionally returns HTTP 200 with an empty body when no articles
+        # match the query or the service is under load. Treat this as zero results
+        # rather than letting JSONDecodeError propagate to the caller.
+        try:
+            raw_articles: list[dict] = response.json().get("articles", [])
+        except ValueError:
+            logger.warning("GDELT returned empty or non-JSON body for query '%s'", query)
+            raw_articles = []
 
         articles: list[NewsArticle] = []
         for item in raw_articles:

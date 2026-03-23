@@ -24,12 +24,11 @@ logger = logging.getLogger(__name__)
 app = FastAPI(title="Macro Sentinel", version="0.1.0")
 
 # Default news query — broad macro + geopolitical coverage.
-# GDELT uses Boolean OR; listing diverse themes ensures we catch breaking events
-# (war, sanctions, rate decisions) alongside structural macro topics.
+# GDELT treats space-separated terms as implicit OR, which is more reliable
+# than explicit Boolean syntax across API versions.
 DEFAULT_NEWS_QUERY = (
-    "war OR conflict OR sanctions OR geopolitical OR"
-    " inflation OR recession OR \"interest rate\" OR \"central bank\" OR"
-    " \"trade war\" OR tariff OR \"stock market\" OR economy"
+    "war conflict sanctions geopolitical inflation recession"
+    " \"interest rate\" \"central bank\" \"trade war\" tariff economy"
 )
 
 # Cache TTL in seconds — GDELT rate-limits aggressively; reuse results within this window.

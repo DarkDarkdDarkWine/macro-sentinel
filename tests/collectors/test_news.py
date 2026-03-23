@@ -95,6 +95,25 @@ def test_collect_counts_east_west_balance(mock_get: MagicMock) -> None:
 
 
 @patch("src.collectors.news.requests.get")
+def test_collect_returns_empty_snapshot_on_empty_response_body(mock_get: MagicMock) -> None:
+    """collect() should return an empty snapshot when GDELT returns HTTP 200 with empty body."""
+    import json as json_module
+
+    mock_response = MagicMock()
+    mock_response.raise_for_status.return_value = None
+    mock_response.json.side_effect = json_module.JSONDecodeError("Expecting value", "", 0)
+    mock_get.return_value = mock_response
+
+    collector = NewsCollector()
+    snapshot = collector.collect("test")
+
+    assert isinstance(snapshot, NewsSnapshot)
+    assert snapshot.articles == []
+    assert snapshot.western_count == 0
+    assert snapshot.eastern_count == 0
+
+
+@patch("src.collectors.news.requests.get")
 def test_collect_raises_on_http_error(mock_get: MagicMock) -> None:
     """collect() should raise an exception when GDELT API returns an HTTP error."""
     mock_get.return_value.raise_for_status.side_effect = Exception("HTTP 500")
