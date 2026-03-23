@@ -78,6 +78,8 @@ def test_index_returns_html(client: TestClient) -> None:
     assert "text/html" in response.headers["content-type"]
 
 
+@patch("src.api.server.LLMClient")
+@patch("src.api.server.translate_titles")
 @patch("src.api.server.MarketCollector")
 @patch("src.api.server.MacroCollector")
 @patch("src.api.server.NewsCollector")
@@ -85,12 +87,18 @@ def test_collect_all_returns_combined_data(
     mock_news_cls: MagicMock,
     mock_macro_cls: MagicMock,
     mock_market_cls: MagicMock,
+    mock_translate: MagicMock,
+    mock_llm_cls: MagicMock,
     client: TestClient,
 ) -> None:
     """GET /api/collect should return market, macro, and news data combined."""
+    import src.api.server as server_module
+
+    server_module._cache.clear()
     mock_market_cls.return_value.collect.return_value = MOCK_MARKET
     mock_macro_cls.return_value.collect.return_value = MOCK_MACRO
     mock_news_cls.return_value.collect.return_value = MOCK_NEWS
+    mock_translate.return_value = [a.title for a in MOCK_NEWS.articles]
 
     response = client.get("/api/collect")
     assert response.status_code == 200
@@ -114,6 +122,9 @@ def test_collect_market_only(
     client: TestClient,
 ) -> None:
     """GET /api/collect?sources=market should return only market data."""
+    import src.api.server as server_module
+
+    server_module._cache.clear()
     mock_market_cls.return_value.collect.return_value = MOCK_MARKET
 
     response = client.get("/api/collect?sources=market")
@@ -125,9 +136,13 @@ def test_collect_market_only(
     assert "news" not in data
 
 
+@patch("src.api.server.LLMClient")
+@patch("src.api.server.translate_titles")
 @patch("src.api.server.NewsCollector")
 def test_collect_news_returns_cached_result_within_ttl(
     mock_news_cls: MagicMock,
+    mock_translate: MagicMock,
+    mock_llm_cls: MagicMock,
     client: TestClient,
 ) -> None:
     """Second /api/collect?sources=news call within TTL should return cached data."""
@@ -135,6 +150,7 @@ def test_collect_news_returns_cached_result_within_ttl(
 
     server_module._cache.clear()
     mock_news_cls.return_value.collect.return_value = MOCK_NEWS
+    mock_translate.return_value = [a.title for a in MOCK_NEWS.articles]
 
     r1 = client.get("/api/collect?sources=news")
     assert r1.status_code == 200
@@ -145,11 +161,15 @@ def test_collect_news_returns_cached_result_within_ttl(
     assert mock_news_cls.return_value.collect.call_count == 1  # only fetched once
 
 
+@patch("src.api.server.LLMClient")
+@patch("src.api.server.translate_titles")
 @patch("src.api.server.time")
 @patch("src.api.server.NewsCollector")
 def test_collect_news_refetches_after_ttl_expires(
     mock_news_cls: MagicMock,
     mock_time: MagicMock,
+    mock_translate: MagicMock,
+    mock_llm_cls: MagicMock,
     client: TestClient,
 ) -> None:
     """After TTL expires, /api/collect?sources=news should call the collector again."""
@@ -157,6 +177,7 @@ def test_collect_news_refetches_after_ttl_expires(
 
     server_module._cache.clear()
     mock_news_cls.return_value.collect.return_value = MOCK_NEWS
+    mock_translate.return_value = [a.title for a in MOCK_NEWS.articles]
     mock_time.time.return_value = 0.0
 
     client.get("/api/collect?sources=news")

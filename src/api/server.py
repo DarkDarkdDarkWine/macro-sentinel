@@ -13,6 +13,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import HTMLResponse
 
+from src.analyzers.llm import LLMClient, translate_titles
 from src.collectors.macro import MacroCollector
 from src.collectors.market import MarketCollector
 from src.collectors.news import NewsCollector
@@ -104,10 +105,19 @@ def collect(
             )
 
         if "news" in requested:
-            result["news"] = _cached_collect(
-                "news",
-                lambda: NewsCollector().collect(DEFAULT_NEWS_QUERY).model_dump(mode="json"),
-            )
+            deepseek_key = os.environ.get("DEEPSEEK_API_KEY", "")
+
+            def _collect_and_translate_news() -> dict:
+                snapshot = NewsCollector().collect(DEFAULT_NEWS_QUERY)
+                if deepseek_key:
+                    llm = LLMClient(api_key=deepseek_key)
+                    titles = [a.title for a in snapshot.articles]
+                    translated = translate_titles(llm, titles)
+                    for article, zh_title in zip(snapshot.articles, translated):
+                        article.title = zh_title
+                return snapshot.model_dump(mode="json")
+
+            result["news"] = _cached_collect("news", _collect_and_translate_news)
 
     except Exception as exc:
         logger.exception("Collector failed: %s", exc)

@@ -16,22 +16,22 @@ logger = logging.getLogger(__name__)
 # Symbols to collect, grouped by category.
 # Extend these lists to add more instruments without changing collector logic.
 INDEX_SYMBOLS: list[tuple[str, str]] = [
-    ("^GSPC", "S&P 500"),
-    ("^IXIC", "NASDAQ"),
-    ("^HSI", "Hang Seng"),
-    ("000001.SS", "Shanghai Composite"),
-    ("^N225", "Nikkei 225"),
+    ("^GSPC", "标普500"),
+    ("^IXIC", "纳斯达克"),
+    ("^HSI", "恒生指数"),
+    ("000001.SS", "上证指数"),
+    ("^N225", "日经225"),
 ]
 
 COMMODITY_SYMBOLS: list[tuple[str, str]] = [
-    ("GC=F", "Gold"),
-    ("CL=F", "Crude Oil (WTI)"),
+    ("GC=F", "黄金"),
+    ("CL=F", "原油(WTI)"),
 ]
 
 FX_SYMBOLS: list[tuple[str, str]] = [
-    ("USDCNY=X", "USD/CNY"),
-    ("EURUSD=X", "EUR/USD"),
-    ("DX-Y.NYB", "US Dollar Index"),
+    ("USDCNY=X", "美元/人民币"),
+    ("EURUSD=X", "欧元/美元"),
+    ("DX-Y.NYB", "美元指数"),
 ]
 
 VIX_SYMBOL: str = "^VIX"

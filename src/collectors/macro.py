@@ -16,11 +16,11 @@ logger = logging.getLogger(__name__)
 # Core FRED series to collect: (series_id, human_readable_name, unit)
 # Add entries here to expand macro coverage without changing collector logic.
 FRED_SERIES: list[tuple[str, str, str]] = [
-    ("FEDFUNDS", "Federal Funds Rate", "Percent"),
-    ("CPIAUCSL", "CPI (All Urban Consumers)", "Index 1982-84=100"),
-    ("UNRATE", "Unemployment Rate", "Percent"),
-    ("T10Y2Y", "10Y-2Y Treasury Spread", "Percent"),
-    ("DGS10", "10-Year Treasury Yield", "Percent"),
+    ("FEDFUNDS", "联邦基金利率", "%"),
+    ("CPIAUCSL", "消费者价格指数(CPI)", "指数"),
+    ("UNRATE", "失业率", "%"),
+    ("T10Y2Y", "10年-2年美债利差", "%"),
+    ("DGS10", "10年期美债收益率", "%"),
 ]
 
 
