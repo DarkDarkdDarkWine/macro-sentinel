@@ -24,6 +24,11 @@ RETRY_BACKOFF_SECONDS: float = 5.0  # wait time doubles each retry
 
 GDELT_API_URL = "https://api.gdeltproject.org/api/v2/doc/doc"
 
+# Return only articles from the last 24 hours so results stay current.
+# GDELT's default searches its entire multi-year archive sorted by relevance,
+# which causes stale articles to surface ahead of breaking news.
+GDELT_TIMESPAN: str = "1d"
+
 # Domains associated with a predominantly western editorial perspective.
 # This list is intentionally not exhaustive — unknown domains default to UNKNOWN.
 WESTERN_DOMAINS: frozenset[str] = frozenset({
@@ -149,6 +154,8 @@ class NewsCollector:
             "mode": "artlist",
             "maxrecords": max_records,
             "format": "json",
+            "sort": "DateDesc",    # most recent articles first
+            "timespan": GDELT_TIMESPAN,  # restrict to last 24 hours
         }
 
         response = self._get_with_retry(GDELT_API_URL, params=params)

@@ -47,6 +47,23 @@ def test_collect_returns_news_snapshot(mock_get: MagicMock) -> None:
 
 
 @patch("src.collectors.news.requests.get")
+def test_collect_requests_date_desc_sort_and_timespan(mock_get: MagicMock) -> None:
+    """collect() must request sort=DateDesc and a timespan so results are recent."""
+    mock_response = MagicMock()
+    mock_response.json.return_value = MOCK_GDELT_RESPONSE
+    mock_response.raise_for_status.return_value = None
+    mock_get.return_value = mock_response
+
+    collector = NewsCollector()
+    collector.collect("test")
+
+    _, kwargs = mock_get.call_args
+    params = kwargs.get("params", {})
+    assert params.get("sort") == "DateDesc", "sort must be DateDesc for freshness"
+    assert "timespan" in params, "timespan must be set to limit results to recent news"
+
+
+@patch("src.collectors.news.requests.get")
 def test_collect_tags_media_bias_correctly(mock_get: MagicMock) -> None:
     """collect() should tag western and eastern sources with correct MediaBias."""
     mock_response = MagicMock()
