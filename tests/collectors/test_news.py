@@ -85,3 +85,48 @@ def test_collect_raises_on_http_error(mock_get: MagicMock) -> None:
     collector = NewsCollector()
     with pytest.raises(Exception):
         collector.collect("test")
+
+
+@patch("src.collectors.news.time.sleep")
+@patch("src.collectors.news.requests.get")
+def test_collect_retries_on_429(mock_get: MagicMock, mock_sleep: MagicMock) -> None:
+    """collect() should retry up to MAX_RETRIES times on HTTP 429, then succeed."""
+    import requests as req
+
+    rate_limit_response = MagicMock()
+    rate_limit_response.status_code = 429
+    rate_limit_response.raise_for_status.side_effect = req.exceptions.HTTPError(
+        response=MagicMock(status_code=429)
+    )
+
+    ok_response = MagicMock()
+    ok_response.status_code = 200
+    ok_response.raise_for_status.return_value = None
+    ok_response.json.return_value = MOCK_GDELT_RESPONSE
+
+    # First call → 429, second call → success
+    mock_get.side_effect = [rate_limit_response, ok_response]
+
+    collector = NewsCollector()
+    snapshot = collector.collect("test")
+
+    assert len(snapshot.articles) == 2
+    assert mock_sleep.called  # backoff sleep was triggered
+
+
+@patch("src.collectors.news.time.sleep")
+@patch("src.collectors.news.requests.get")
+def test_collect_raises_after_max_retries(mock_get: MagicMock, mock_sleep: MagicMock) -> None:
+    """collect() should raise after exhausting all retries on persistent 429."""
+    import requests as req
+
+    rate_limit_response = MagicMock()
+    rate_limit_response.status_code = 429
+    rate_limit_response.raise_for_status.side_effect = req.exceptions.HTTPError(
+        response=MagicMock(status_code=429)
+    )
+    mock_get.return_value = rate_limit_response
+
+    collector = NewsCollector()
+    with pytest.raises(req.exceptions.HTTPError):
+        collector.collect("test")

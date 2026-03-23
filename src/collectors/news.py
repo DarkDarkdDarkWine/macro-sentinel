@@ -6,6 +6,7 @@ All HTTP calls to GDELT are isolated here — no requests imports elsewhere for 
 """
 
 import logging
+import time
 from datetime import datetime, timezone
 
 import requests
@@ -16,6 +17,10 @@ logger = logging.getLogger(__name__)
 
 # Timeout for GDELT API requests in seconds
 REQUEST_TIMEOUT: int = 30
+
+# Retry settings for 429 Too Many Requests
+MAX_RETRIES: int = 3
+RETRY_BACKOFF_SECONDS: float = 5.0  # wait time doubles each retry
 
 GDELT_API_URL = "https://api.gdeltproject.org/api/v2/doc/doc"
 
@@ -87,6 +92,40 @@ def _parse_gdelt_date(raw: str) -> datetime:
 class NewsCollector:
     """Collects global news articles from GDELT with East/West perspective tagging."""
 
+    def _get_with_retry(self, url: str, params: dict) -> requests.Response:
+        """GET with exponential backoff on HTTP 429.
+
+        Args:
+            url: Target URL.
+            params: Query parameters.
+
+        Returns:
+            Successful Response object.
+
+        Raises:
+            requests.exceptions.HTTPError: After MAX_RETRIES exhausted on 429,
+                or immediately on any other HTTP error.
+        """
+        wait = RETRY_BACKOFF_SECONDS
+        for attempt in range(MAX_RETRIES + 1):
+            response = requests.get(url, params=params, timeout=REQUEST_TIMEOUT)
+            try:
+                response.raise_for_status()
+                return response
+            except requests.exceptions.HTTPError as exc:
+                # Only retry on 429; surface all other errors immediately
+                if response.status_code != 429 or attempt == MAX_RETRIES:
+                    raise
+                logger.warning(
+                    "GDELT returned 429, retrying in %.0fs (attempt %d/%d)",
+                    wait, attempt + 1, MAX_RETRIES,
+                )
+                time.sleep(wait)
+                wait *= 2  # exponential backoff
+
+        # Unreachable, but satisfies type checker
+        raise RuntimeError("Retry loop exited unexpectedly")
+
     def collect(self, query: str, max_records: int = 50) -> NewsSnapshot:
         """Fetch news articles matching the query from GDELT DOC 2.0 API.
 
@@ -112,7 +151,7 @@ class NewsCollector:
             "format": "json",
         }
 
-        response = requests.get(GDELT_API_URL, params=params, timeout=REQUEST_TIMEOUT)
+        response = self._get_with_retry(GDELT_API_URL, params=params)
         response.raise_for_status()
 
         raw_articles: list[dict] = response.json().get("articles", [])
