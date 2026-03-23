@@ -125,6 +125,48 @@ def test_collect_market_only(
     assert "news" not in data
 
 
+@patch("src.api.server.NewsCollector")
+def test_collect_news_returns_cached_result_within_ttl(
+    mock_news_cls: MagicMock,
+    client: TestClient,
+) -> None:
+    """Second /api/collect?sources=news call within TTL should return cached data."""
+    import src.api.server as server_module
+
+    server_module._cache.clear()
+    mock_news_cls.return_value.collect.return_value = MOCK_NEWS
+
+    r1 = client.get("/api/collect?sources=news")
+    assert r1.status_code == 200
+
+    r2 = client.get("/api/collect?sources=news")
+    assert r2.status_code == 200
+    assert r2.json() == r1.json()
+    assert mock_news_cls.return_value.collect.call_count == 1  # only fetched once
+
+
+@patch("src.api.server.time")
+@patch("src.api.server.NewsCollector")
+def test_collect_news_refetches_after_ttl_expires(
+    mock_news_cls: MagicMock,
+    mock_time: MagicMock,
+    client: TestClient,
+) -> None:
+    """After TTL expires, /api/collect?sources=news should call the collector again."""
+    import src.api.server as server_module
+
+    server_module._cache.clear()
+    mock_news_cls.return_value.collect.return_value = MOCK_NEWS
+    mock_time.time.return_value = 0.0
+
+    client.get("/api/collect?sources=news")
+    assert mock_news_cls.return_value.collect.call_count == 1
+
+    mock_time.time.return_value = server_module.CACHE_TTL_SECONDS + 1
+    client.get("/api/collect?sources=news")
+    assert mock_news_cls.return_value.collect.call_count == 2
+
+
 @patch("src.api.server.MarketCollector")
 def test_collect_returns_500_on_collector_error(
     mock_market_cls: MagicMock,
