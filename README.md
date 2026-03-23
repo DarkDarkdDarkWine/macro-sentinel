@@ -43,9 +43,21 @@
 |------|------|
 | LLM | DeepSeek API |
 | 市场数据 | yfinance |
-| 新闻数据 | GDELT / NewsAPI |
+| 宏观数据 | FRED API |
+| 新闻数据 | GDELT |
+| Web 框架 | FastAPI + uvicorn |
 | 运行环境 | Python 3.10+ |
 | 部署 | 本地 / NAS Docker |
+
+## 快速启动
+
+```bash
+pip install -r requirements.txt
+cp .env.example .env   # 填入 FRED_API_KEY
+python3 -m uvicorn src.api.server:app --host 0.0.0.0 --port 8765 --reload
+```
+
+打开 http://localhost:8765，点击「采集数据」即可查看实时数据面板。
 
 ## 定位说明
 
@@ -53,7 +65,8 @@
 
 ## 开发计划
 
-- [ ] 第一阶段：数据采集 — 拉取市场数据 + 新闻数据，跑通 pipeline
+- [x] 第一阶段：数据采集 — yfinance（市场）、FRED（宏观）、GDELT（新闻）三路采集，含东西方视角标注
+- [x] 第一阶段：可视化面板 — FastAPI 服务 + 单页 HTML 仪表盘
 - [ ] 第二阶段：分析引擎 — LLM 生成每日宏观简报
 - [ ] 第三阶段：建议输出 — 结构化持仓建议报告
 - [ ] 第四阶段：自动化 — 定时运行，推送到指定渠道
