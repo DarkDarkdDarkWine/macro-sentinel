@@ -63,6 +63,17 @@ def test_collect_returns_macro_snapshot(
 
 
 @patch("src.collectors.macro.Fred")
+def test_fred_constructor_called_with_only_supported_args(mock_fred_cls: MagicMock) -> None:
+    """Fred() must not receive unsupported kwargs like request_params."""
+    MacroCollector(api_key="test_key")
+    call_kwargs = mock_fred_cls.call_args.kwargs
+    assert "request_params" not in call_kwargs, (
+        "fredapi.Fred does not support request_params; it will raise TypeError at runtime"
+    )
+    assert call_kwargs.get("api_key") == "test_key"
+
+
+@patch("src.collectors.macro.Fred")
 def test_fetch_series_raises_on_empty_data(mock_fred_cls: MagicMock) -> None:
     """fetch_series() should raise ValueError when FRED returns empty data."""
     mock_fred_cls.return_value.get_series.return_value = pd.Series([], dtype=float)

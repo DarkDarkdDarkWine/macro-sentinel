@@ -36,8 +36,8 @@ class MacroCollector:
         Args:
             api_key: FRED API key obtained from fredaccount.stlouisfed.org.
         """
-        # request_params is forwarded to every underlying requests call by fredapi.
-        self._fred = Fred(api_key=api_key, request_params={"timeout": REQUEST_TIMEOUT})
+        # fredapi uses urllib internally and does not support a timeout parameter.
+        self._fred = Fred(api_key=api_key)
 
     def fetch_series(self, series_id: str, name: str, unit: str) -> MacroSeries:
         """Fetch the latest observation for a single FRED series.

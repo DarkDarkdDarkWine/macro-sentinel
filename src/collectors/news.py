@@ -1,240 +1,134 @@
-"""GDELT news collector.
+"""RSS news collector.
 
-Fetches recent global news articles via the GDELT DOC 2.0 API.
-Applies East/West media bias tagging to support balanced perspective analysis.
-All HTTP calls to GDELT are isolated here — no requests imports elsewhere for news.
+Fetches recent global news articles from curated RSS feeds.
+Applies East/West media bias tagging based on each feed's editorial perspective.
+All HTTP calls are handled by feedparser — no requests imports here.
 """
 
 import logging
-import time
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
+from time import mktime
 
-import requests
+import feedparser
 
 from src.models.news import MediaBias, NewsArticle, NewsSnapshot
 
 logger = logging.getLogger(__name__)
 
-# Timeout for GDELT API requests in seconds
-REQUEST_TIMEOUT: int = 30
+# Timeout in seconds for each RSS feed fetch.
+REQUEST_TIMEOUT: int = 15
 
-# Retry settings for 429 Too Many Requests
-MAX_RETRIES: int = 3
-RETRY_BACKOFF_SECONDS: float = 5.0  # wait time doubles each retry
+# Tuples of (feed_url, media_bias, source_domain).
+# Edit this list to add/remove sources; the collector logic does not change.
+RSS_FEEDS: list[tuple[str, MediaBias, str]] = [
+    # Western / neutral wire services
+    ("https://feeds.bbci.co.uk/news/world/rss.xml",           MediaBias.WESTERN, "bbc.co.uk"),
+    ("https://feeds.bbci.co.uk/news/business/rss.xml",        MediaBias.WESTERN, "bbc.co.uk"),
+    ("https://apnews.com/world-news.rss",                      MediaBias.WESTERN, "apnews.com"),
+    ("https://www.cnbc.com/id/20910258/device/rss/rss.html",  MediaBias.WESTERN, "cnbc.com"),
+    ("https://www.aljazeera.com/xml/rss/all.xml",              MediaBias.NEUTRAL, "aljazeera.com"),
+    # Eastern / Asia-Pacific sources
+    ("https://www.scmp.com/rss/3/feed",                        MediaBias.EASTERN, "scmp.com"),
+    ("http://www.xinhuanet.com/english/rss_eng.htm",           MediaBias.EASTERN, "xinhuanet.com"),
+    ("https://www3.nhk.or.jp/nhkworld/data/en/news/backstory/rss.xml",
+                                                               MediaBias.EASTERN, "nhk.or.jp"),
+    # High-signal official sources (low volume, authoritative)
+    ("https://www.federalreserve.gov/feeds/press_all.xml",     MediaBias.NEUTRAL, "federalreserve.gov"),
+]
 
-GDELT_API_URL = "https://api.gdeltproject.org/api/v2/doc/doc"
-
-# Primary timespan: return only articles from the last 24 hours.
-# GDELT's default searches its entire multi-year archive sorted by relevance,
-# which causes stale articles to surface ahead of breaking news.
-GDELT_TIMESPAN: str = "1d"
-
-# Fallback timespan used when the primary window returns zero articles
-# (e.g., low news volume, weekend, or API indexing lag).
-GDELT_FALLBACK_TIMESPAN: str = "7d"
-
-# Domains associated with a predominantly western editorial perspective.
-# This list is intentionally not exhaustive — unknown domains default to UNKNOWN.
-WESTERN_DOMAINS: frozenset[str] = frozenset({
-    "reuters.com",
-    "apnews.com",
-    "bbc.com",
-    "bbc.co.uk",
-    "theguardian.com",
-    "nytimes.com",
-    "washingtonpost.com",
-    "ft.com",
-    "bloomberg.com",
-    "wsj.com",
-    "cnn.com",
-    "nbcnews.com",
-    "abcnews.go.com",
-    "politico.com",
-    "foreignpolicy.com",
-})
-
-# Domains associated with a predominantly eastern editorial perspective.
-EASTERN_DOMAINS: frozenset[str] = frozenset({
-    "xinhuanet.com",
-    "cgtn.com",
-    "chinadaily.com.cn",
-    "globaltimes.cn",
-    "people.com.cn",
-    "scmp.com",
-    "nhk.or.jp",
-    "rt.com",
-    "tass.com",
-    "aljazeera.com",
-    "presstv.ir",
-})
-
-
-def _classify_bias(domain: str) -> MediaBias:
-    """Classify the editorial perspective of a news domain.
-
-    Args:
-        domain: Publishing domain, e.g. 'reuters.com'.
-
-    Returns:
-        MediaBias enum value based on known domain lists.
-    """
-    if domain in WESTERN_DOMAINS:
-        return MediaBias.WESTERN
-    if domain in EASTERN_DOMAINS:
-        return MediaBias.EASTERN
-    return MediaBias.UNKNOWN
-
-
-def _parse_gdelt_date(raw: str) -> datetime:
-    """Parse GDELT's date format '20240315T120000Z' into a datetime.
-
-    Args:
-        raw: GDELT date string.
-
-    Returns:
-        UTC-aware datetime object.
-    """
-    # GDELT uses compact ISO 8601: YYYYMMDDTHHmmssZ
-    return datetime.strptime(raw, "%Y%m%dT%H%M%SZ").replace(tzinfo=timezone.utc)
+# Include articles published within this window; older ones are discarded.
+RECENCY_HOURS: int = 24
 
 
 class NewsCollector:
-    """Collects global news articles from GDELT with East/West perspective tagging."""
+    """Collects global news articles from curated RSS feeds with East/West perspective tagging."""
 
-    def _get_with_retry(self, url: str, params: dict) -> requests.Response:
-        """GET with exponential backoff on HTTP 429.
-
-        Args:
-            url: Target URL.
-            params: Query parameters.
-
-        Returns:
-            Successful Response object.
-
-        Raises:
-            requests.exceptions.HTTPError: After MAX_RETRIES exhausted on 429,
-                or immediately on any other HTTP error.
-        """
-        wait = RETRY_BACKOFF_SECONDS
-        for attempt in range(MAX_RETRIES + 1):
-            response = requests.get(url, params=params, timeout=REQUEST_TIMEOUT)
-            try:
-                response.raise_for_status()
-                return response
-            except requests.exceptions.HTTPError as exc:
-                # Only retry on 429; surface all other errors immediately
-                if response.status_code != 429 or attempt == MAX_RETRIES:
-                    raise
-                logger.warning(
-                    "GDELT returned 429, retrying in %.0fs (attempt %d/%d)",
-                    wait, attempt + 1, MAX_RETRIES,
-                )
-                time.sleep(wait)
-                wait *= 2  # exponential backoff
-
-        # Unreachable, but satisfies type checker
-        raise RuntimeError("Retry loop exited unexpectedly")
-
-    def _fetch_raw_articles(self, query: str, max_records: int, timespan: str) -> list[dict]:
-        """Fetch raw article dicts from GDELT for the given timespan.
+    def _fetch_feed(self, url: str, bias: MediaBias, domain: str) -> list[NewsArticle]:
+        """Fetch and parse one RSS feed, returning a list of NewsArticle objects.
 
         Args:
-            query: Free-text search query.
-            max_records: Maximum number of results to request.
-            timespan: GDELT timespan string, e.g. '1d' or '7d'.
+            url: RSS feed URL.
+            bias: Editorial perspective to tag every article from this feed.
+            domain: Canonical source domain to assign (overrides per-entry domain).
 
         Returns:
-            List of raw article dicts; empty list on parse failure or no results.
-
-        Raises:
-            requests.exceptions.HTTPError: On non-429 HTTP errors after retries exhausted.
+            List of parsed NewsArticle objects; empty list on any error.
         """
-        params = {
-            "query": query,
-            "mode": "artlist",
-            "maxrecords": max_records,
-            "format": "json",
-            "sort": "DateDesc",
-            "timespan": timespan,
-        }
-
-        response = self._get_with_retry(GDELT_API_URL, params=params)
-
-        # GDELT occasionally returns HTTP 200 with an empty body when no articles
-        # match the query or the service is under load.
         try:
-            return response.json().get("articles", [])
-        except ValueError:
-            # Log first 200 chars of body to aid future diagnosis of the root cause.
-            body_preview = response.text[:200] if response.text else "<empty>"
-            logger.warning(
-                "GDELT returned non-JSON body for query '%s' timespan=%s: %s",
-                query, timespan, body_preview,
-            )
+            feed = feedparser.parse(url, request_headers={"User-Agent": "macro-sentinel/0.1"})
+        except Exception as exc:
+            logger.warning("Failed to fetch RSS feed %s: %s", url, exc)
             return []
 
-    def collect(self, query: str, max_records: int = 50) -> NewsSnapshot:
-        """Fetch news articles matching the query from GDELT DOC 2.0 API.
+        articles: list[NewsArticle] = []
+        for entry in feed.entries:
+            published_parsed = getattr(entry, "published_parsed", None)
+            if published_parsed is None:
+                logger.debug("Skipping entry without published date: %s", getattr(entry, "link", ""))
+                continue
 
-        Tries the primary timespan (GDELT_TIMESPAN) first. If zero articles are
-        returned — which happens when there is a low news volume or indexing lag —
-        retries with the fallback timespan (GDELT_FALLBACK_TIMESPAN) before giving up.
+            try:
+                published_at = datetime.fromtimestamp(mktime(published_parsed), tz=timezone.utc)
+            except (OverflowError, OSError, ValueError) as exc:
+                logger.debug("Skipping entry with unparseable date: %s", exc)
+                continue
+
+            articles.append(NewsArticle(
+                title=getattr(entry, "title", ""),
+                url=getattr(entry, "link", ""),
+                source_domain=domain,
+                published_at=published_at,
+                language="en",
+                media_bias=bias,
+            ))
+
+        return articles
+
+    def collect(self, query: str = "", max_records: int = 50) -> NewsSnapshot:
+        """Fetch articles from all configured RSS feeds.
+
+        Fetches all feeds, deduplicates by URL, sorts by publication date
+        (newest first), and returns the top max_records articles.
 
         Args:
-            query: Free-text search query, e.g. 'geopolitical risk trade war'.
+            query: Label stored in the snapshot for display/logging purposes.
+                   Not used for filtering — feed selection provides that signal.
             max_records: Maximum number of articles to return (default 50).
 
         Returns:
             NewsSnapshot with articles tagged by media perspective.
-
-        Raises:
-            requests.exceptions.HTTPError: If the GDELT API returns an HTTP error.
         """
-        logger.info("Fetching GDELT news for query: '%s'", query)
+        logger.info("Collecting RSS news from %d feeds", len(RSS_FEEDS))
 
-        raw_articles = self._fetch_raw_articles(query, max_records, GDELT_TIMESPAN)
+        all_articles: list[NewsArticle] = []
+        seen_urls: set[str] = set()
 
-        if not raw_articles:
+        for url, bias, domain in RSS_FEEDS:
+            for article in self._fetch_feed(url, bias, domain):
+                if article.url and article.url not in seen_urls:
+                    seen_urls.add(article.url)
+                    all_articles.append(article)
+
+        # Sort newest-first
+        all_articles.sort(key=lambda a: a.published_at, reverse=True)
+
+        # Filter to recency window; fall back to all articles if window is empty
+        cutoff = datetime.now(timezone.utc) - timedelta(hours=RECENCY_HOURS)
+        recent = [a for a in all_articles if a.published_at >= cutoff]
+        if not recent:
             logger.warning(
-                "No articles from GDELT with timespan=%s, retrying with timespan=%s",
-                GDELT_TIMESPAN, GDELT_FALLBACK_TIMESPAN,
+                "No articles within %dh window — returning all %d collected",
+                RECENCY_HOURS, len(all_articles),
             )
-            raw_articles = self._fetch_raw_articles(query, max_records, GDELT_FALLBACK_TIMESPAN)
+            recent = all_articles
 
-        articles: list[NewsArticle] = []
-        for item in raw_articles:
-            # Skip articles with missing or malformed date — one bad record must not
-            # abort the entire batch; log and continue instead of raising.
-            raw_date = item.get("seendate", "")
-            if not raw_date:
-                logger.warning("Skipping article with missing seendate: %s", item.get("url"))
-                continue
-            try:
-                published_at = _parse_gdelt_date(raw_date)
-            except ValueError:
-                logger.warning(
-                    "Skipping article with unparseable seendate '%s': %s",
-                    raw_date, item.get("url"),
-                )
-                continue
-
-            domain = item.get("domain", "")
-            articles.append(
-                NewsArticle(
-                    title=item.get("title", ""),
-                    url=item.get("url", ""),
-                    source_domain=domain,
-                    published_at=published_at,
-                    language=item.get("language", "unknown"),
-                    media_bias=_classify_bias(domain),
-                )
-            )
+        articles = recent[:max_records]
 
         western_count = sum(1 for a in articles if a.media_bias == MediaBias.WESTERN)
         eastern_count = sum(1 for a in articles if a.media_bias == MediaBias.EASTERN)
 
         logger.info(
-            "Fetched %d articles (western=%d, eastern=%d)",
+            "Collected %d articles (western=%d, eastern=%d)",
             len(articles), western_count, eastern_count,
         )
 
