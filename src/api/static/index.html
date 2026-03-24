@@ -3,326 +3,660 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Macro Sentinel</title>
+  <title>宏观哨兵 Macro Sentinel</title>
   <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
 
     body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      background: #0f1117;
-      color: #e2e8f0;
-      min-height: 100vh;
-      padding: 24px;
+      font-family: 'SF Mono', 'Monaco', 'Consolas', 'Courier New', monospace;
+      background: #0a0e14;
+      color: #d4d4d8;
+      font-size: 13px;
+      line-height: 1.5;
     }
 
-    header {
+    .container {
+      max-width: 1920px;
+      margin: 0 auto;
+      padding: 16px;
+    }
+
+    /* Header */
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px 0;
+      border-bottom: 1px solid #1f2937;
+      margin-bottom: 16px;
+    }
+
+    .title {
+      font-size: 18px;
+      font-weight: 700;
+      color: #60a5fa;
+      letter-spacing: -0.5px;
+    }
+
+    .timestamp {
+      color: #64748b;
+      font-size: 11px;
+    }
+
+    /* Control Bar */
+    .controls {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      margin-bottom: 16px;
+      padding: 12px;
+      background: #111827;
+      border: 1px solid #1f2937;
+      border-radius: 4px;
+    }
+
+    .checkbox-group {
+      display: flex;
+      gap: 16px;
+      align-items: center;
+    }
+
+    label {
       display: flex;
       align-items: center;
-      justify-content: space-between;
-      margin-bottom: 28px;
+      gap: 6px;
+      cursor: pointer;
+      color: #94a3b8;
+      font-size: 12px;
     }
 
-    h1 { font-size: 1.4rem; font-weight: 600; letter-spacing: 0.02em; }
-    h1 span { color: #60a5fa; }
+    input[type="checkbox"] {
+      width: 14px;
+      height: 14px;
+      accent-color: #60a5fa;
+    }
 
-    .subtitle { font-size: 0.8rem; color: #64748b; margin-top: 2px; }
-
-    .btn {
-      background: #2563eb;
-      color: #fff;
+    button {
+      background: #1e40af;
+      color: white;
       border: none;
       padding: 8px 20px;
-      border-radius: 6px;
-      font-size: 0.85rem;
+      border-radius: 4px;
       cursor: pointer;
-      transition: background 0.15s;
-    }
-    .btn:hover { background: #1d4ed8; }
-    .btn:disabled { background: #334155; cursor: not-allowed; }
-
-    .source-toggle { display: flex; gap: 8px; align-items: center; }
-    .source-toggle label {
-      display: flex;
-      align-items: center;
-      gap: 4px;
-      font-size: 0.8rem;
-      color: #94a3b8;
-      cursor: pointer;
-    }
-    .source-toggle input[type=checkbox] { accent-color: #60a5fa; }
-
-    #status {
-      font-size: 0.8rem;
-      color: #64748b;
-      margin-bottom: 20px;
-      min-height: 1.2em;
-    }
-    #status.loading { color: #facc15; }
-    #status.error   { color: #f87171; }
-    #status.done    { color: #4ade80; }
-
-    .grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-      gap: 16px;
-    }
-
-    .card {
-      background: #1e293b;
-      border-radius: 10px;
-      padding: 18px;
-      border: 1px solid #334155;
-    }
-
-    .card-title {
-      font-size: 0.75rem;
+      font-family: inherit;
+      font-size: 12px;
       font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-      color: #94a3b8;
-      margin-bottom: 14px;
+      transition: all 0.2s;
     }
 
-    /* VIX big number */
-    .vix-block { text-align: center; padding: 8px 0; }
-    .vix-number { font-size: 3rem; font-weight: 700; }
-    .vix-label  { font-size: 0.75rem; color: #94a3b8; margin-top: 4px; }
-    .vix-low    { color: #4ade80; }
-    .vix-mid    { color: #facc15; }
-    .vix-high   { color: #f97316; }
-    .vix-extreme{ color: #f87171; }
+    button:hover:not(:disabled) {
+      background: #2563eb;
+    }
 
-    /* Index rows */
-    .index-row {
+    button:disabled {
+      background: #374151;
+      cursor: not-allowed;
+      color: #6b7280;
+    }
+
+    .status {
+      margin-left: auto;
+      font-size: 11px;
+      padding: 6px 12px;
+      border-radius: 3px;
+      background: #1f2937;
+    }
+
+    .status.loading { color: #60a5fa; }
+    .status.error { color: #f87171; background: #450a0a; }
+    .status.done { color: #34d399; background: #064e3b; }
+
+    /* Main Grid */
+    .dashboard-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      grid-template-rows: auto auto;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .panel {
+      background: #111827;
+      border: 1px solid #1f2937;
+      border-radius: 4px;
+      overflow: hidden;
+    }
+
+    .panel-header {
+      background: #0f172a;
+      padding: 10px 14px;
+      border-bottom: 1px solid #1f2937;
       display: flex;
       justify-content: space-between;
       align-items: center;
-      padding: 6px 0;
-      border-bottom: 1px solid #334155;
-      font-size: 0.85rem;
     }
-    .index-row:last-child { border-bottom: none; }
-    .index-name  { color: #cbd5e1; }
-    .index-price { font-variant-numeric: tabular-nums; }
-    .change-pos  { color: #4ade80; font-size: 0.78rem; }
-    .change-neg  { color: #f87171; font-size: 0.78rem; }
-    .change-neu  { color: #94a3b8; font-size: 0.78rem; }
 
-    /* Macro series */
-    .macro-row {
+    .panel-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: #e5e7eb;
+      letter-spacing: -0.3px;
+    }
+
+    .panel-badge {
+      font-size: 10px;
+      padding: 3px 8px;
+      border-radius: 3px;
+      background: #1f2937;
+      color: #94a3b8;
+    }
+
+    .panel-content {
+      padding: 12px;
+      max-height: 450px;
+      overflow-y: auto;
+    }
+
+    /* VIX Panel */
+    .vix-panel {
+      grid-column: 1 / -1;
+    }
+
+    .vix-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+    }
+
+    .vix-card {
+      text-align: center;
+      padding: 16px 12px;
+      background: #0f172a;
+      border-radius: 4px;
+      border: 1px solid #1f2937;
+    }
+
+    .vix-value {
+      font-size: 28px;
+      font-weight: 700;
+      margin-bottom: 4px;
+    }
+
+    .vix-value.low { color: #34d399; }
+    .vix-value.medium { color: #fbbf24; }
+    .vix-value.high { color: #f97316; }
+    .vix-value.extreme { color: #dc2626; }
+
+    .vix-label {
+      font-size: 10px;
+      color: #64748b;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    /* Market Data Table */
+    .data-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+    }
+
+    .data-table th {
+      text-align: left;
+      padding: 8px 10px;
+      color: #64748b;
+      font-weight: 600;
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      border-bottom: 1px solid #1f2937;
+    }
+
+    .data-table td {
+      padding: 8px 10px;
+      border-bottom: 1px solid #1f2937;
+    }
+
+    .data-table tr:last-child td {
+      border-bottom: none;
+    }
+
+    .data-table .name {
+      color: #e5e7eb;
+      font-weight: 500;
+    }
+
+    .data-table .value {
+      font-family: 'SF Mono', monospace;
+      color: #fbbf24;
+      font-weight: 600;
+    }
+
+    .data-table .change {
+      font-weight: 600;
+    }
+
+    .change.positive { color: #34d399; }
+    .change.negative { color: #f87171; }
+
+    /* Macro Indicators */
+    .macro-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .macro-item {
       display: flex;
       justify-content: space-between;
-      padding: 6px 0;
-      border-bottom: 1px solid #334155;
-      font-size: 0.85rem;
+      align-items: center;
+      padding: 10px;
+      background: #0f172a;
+      border-radius: 3px;
+      border: 1px solid #1f2937;
     }
-    .macro-row:last-child { border-bottom: none; }
-    .macro-name  { color: #cbd5e1; max-width: 70%; }
-    .macro-value { font-variant-numeric: tabular-nums; color: #93c5fd; }
 
-    /* News */
+    .macro-name {
+      color: #94a3b8;
+      font-size: 11px;
+    }
+
+    .macro-value {
+      color: #fbbf24;
+      font-weight: 600;
+      font-size: 13px;
+    }
+
+    .macro-unit {
+      color: #64748b;
+      font-size: 10px;
+      margin-left: 4px;
+    }
+
+    /* News Panel */
+    .news-panel {
+      grid-column: 1 / -1;
+    }
+
     .news-balance {
       display: flex;
       gap: 12px;
       margin-bottom: 12px;
-      font-size: 0.78rem;
+      padding: 8px;
+      background: #0f172a;
+      border-radius: 3px;
     }
-    .badge-west { background: #1e40af; color: #93c5fd; padding: 2px 8px; border-radius: 99px; }
-    .badge-east { background: #7c2d12; color: #fca5a5; padding: 2px 8px; border-radius: 99px; }
 
-    .article-item {
-      padding: 7px 0;
-      border-bottom: 1px solid #334155;
-      font-size: 0.82rem;
+    .balance-badge {
+      font-size: 11px;
+      padding: 4px 10px;
+      border-radius: 3px;
+      font-weight: 600;
     }
-    .article-item:last-child { border-bottom: none; }
-    .article-title { color: #e2e8f0; line-height: 1.4; }
-    .article-meta  { color: #64748b; font-size: 0.72rem; margin-top: 3px; display: flex; gap: 8px; }
-    .bias-west { color: #93c5fd; }
-    .bias-east { color: #fca5a5; }
-    .bias-unknown { color: #64748b; }
 
-    .placeholder {
-      color: #475569;
-      font-size: 0.85rem;
+    .balance-badge.western {
+      background: #1e3a5f;
+      color: #60a5fa;
+    }
+
+    .balance-badge.eastern {
+      background: #065f46;
+      color: #34d399;
+    }
+
+    .balance-badge.neutral {
+      background: #374151;
+      color: #9ca3af;
+    }
+
+    .news-list {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .news-item {
+      padding: 10px;
+      background: #0f172a;
+      border-radius: 3px;
+      border-left: 3px solid #1f2937;
+      transition: all 0.2s;
+    }
+
+    .news-item:hover {
+      background: #1e293b;
+    }
+
+    .news-item.western {
+      border-left-color: #3b82f6;
+    }
+
+    .news-item.eastern {
+      border-left-color: #10b981;
+    }
+
+    .news-item.neutral {
+      border-left-color: #6b7280;
+    }
+
+    .news-title {
+      font-size: 12px;
+      color: #e5e7eb;
+      margin-bottom: 6px;
+      line-height: 1.4;
+    }
+
+    .news-title a {
+      color: inherit;
+      text-decoration: none;
+    }
+
+    .news-title a:hover {
+      color: #60a5fa;
+    }
+
+    .news-meta {
+      display: flex;
+      gap: 8px;
+      font-size: 10px;
+      color: #64748b;
+    }
+
+    /* Footer */
+    .footer {
       text-align: center;
-      padding: 32px 0;
+      padding: 16px;
+      color: #4b5563;
+      font-size: 10px;
+      border-top: 1px solid #1f2937;
+      margin-top: 16px;
     }
 
-    .fetched-at { font-size: 0.7rem; color: #475569; margin-top: 10px; text-align: right; }
+    /* Scrollbar */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: #0f172a;
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: #374151;
+      border-radius: 3px;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+      background: #4b5563;
+    }
+
+    /* Responsive */
+    @media (max-width: 1200px) {
+      .dashboard-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .news-list {
+        grid-template-columns: 1fr;
+      }
+
+      .vix-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+    }
   </style>
 </head>
 <body>
+  <div class="container">
+    <!-- Header -->
+    <div class="header">
+      <div class="title">◉ 宏观哨兵 MACRO SENTINEL</div>
+      <div class="timestamp" id="current-time"></div>
+    </div>
 
-<header>
-  <div>
-    <h1>Macro <span>Sentinel</span></h1>
-    <div class="subtitle">宏观哨兵 · 全球事件 + 市场监控 + 投资信号</div>
-  </div>
-  <div style="display:flex; flex-direction:column; align-items:flex-end; gap:8px;">
-    <div class="source-toggle">
-      <label><input type="checkbox" id="chk-market" checked> 市场</label>
-      <label><input type="checkbox" id="chk-macro" checked> 宏观</label>
-      <label><input type="checkbox" id="chk-news" checked> 新闻</label>
-      <button class="btn" id="btn-collect" onclick="collect()">采集数据</button>
+    <!-- Controls -->
+    <div class="controls">
+      <div class="checkbox-group">
+        <label><input type="checkbox" id="chk-market" checked /> 市场</label>
+        <label><input type="checkbox" id="chk-macro" checked /> 宏观</label>
+        <label><input type="checkbox" id="chk-news" checked /> 新闻</label>
+      </div>
+      <button id="btn-collect" onclick="collect()">▶ 采集数据</button>
+      <div class="status" id="status">准备就绪</div>
+    </div>
+
+    <!-- Dashboard -->
+    <div id="dashboard" class="dashboard-grid"></div>
+
+    <!-- Footer -->
+    <div class="footer">
+      宏观哨兵 Macro Sentinel v0.2.0 · 数据仅供参考，不构成投资建议
     </div>
   </div>
-</header>
 
-<div id="status">尚未采集数据，点击「采集数据」开始</div>
+  <script>
+    // Update current time
+    function updateTime() {
+      const now = new Date();
+      document.getElementById('current-time').textContent =
+        now.toLocaleString('zh-CN', {
+          timeZone: 'Asia/Shanghai',
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit'
+        });
+    }
+    updateTime();
+    setInterval(updateTime, 1000);
 
-<div class="grid" id="grid">
-  <div class="card"><div class="placeholder">市场数据将显示在这里</div></div>
-  <div class="card"><div class="placeholder">宏观指标将显示在这里</div></div>
-  <div class="card"><div class="placeholder">全球新闻将显示在这里</div></div>
-</div>
-
-<script>
-  function vixClass(v) {
-    if (v < 15) return 'vix-low';
-    if (v < 25) return 'vix-mid';
-    if (v < 35) return 'vix-high';
-    return 'vix-extreme';
-  }
-
-  function vixLabel(v) {
-    if (v < 15) return '市场平静';
-    if (v < 25) return '正常波动';
-    if (v < 35) return '市场紧张';
-    return '极度恐慌';
-  }
-
-  function changeClass(pct) {
-    if (pct > 0) return 'change-pos';
-    if (pct < 0) return 'change-neg';
-    return 'change-neu';
-  }
-
-  function changeStr(pct) {
-    const sign = pct >= 0 ? '+' : '';
-    return `${sign}${pct.toFixed(2)}%`;
-  }
-
-  function fmtTime(iso) {
-    return new Date(iso).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' });
-  }
-
-  function renderMarket(data) {
-    const vixCls = vixClass(data.vix);
-    const rows = (items) => items.map(i => `
-      <div class="index-row">
-        <span class="index-name">${i.name}</span>
-        <span>
-          <span class="index-price">${i.price.toLocaleString()}</span>
-          <span class="${changeClass(i.change_pct)}"> ${changeStr(i.change_pct)}</span>
-        </span>
-      </div>`).join('');
-
-    return `
-      <div class="card-title">📈 市场数据</div>
-      <div class="vix-block">
-        <div class="vix-number ${vixCls}">${data.vix.toFixed(1)}</div>
-        <div class="vix-label">VIX 恐慌指数 · ${vixLabel(data.vix)}</div>
-      </div>
-      <div style="margin-top:14px;">
-        <div class="card-title" style="margin-bottom:8px;">主要指数</div>
-        ${rows(data.indices)}
-      </div>
-      <div style="margin-top:12px;">
-        <div class="card-title" style="margin-bottom:8px;">大宗商品</div>
-        ${rows(data.commodities)}
-      </div>
-      <div style="margin-top:12px;">
-        <div class="card-title" style="margin-bottom:8px;">汇率</div>
-        ${rows(data.fx_rates)}
-      </div>
-      <div class="fetched-at">采集于 ${fmtTime(data.fetched_at)}</div>`;
-  }
-
-  function renderMacro(data) {
-    const rows = data.series.map(s => `
-      <div class="macro-row">
-        <span class="macro-name">${s.name}</span>
-        <span class="macro-value">${s.value.toFixed(2)} <small style="color:#64748b">${s.unit}</small></span>
-      </div>`).join('');
-
-    return `
-      <div class="card-title">🏦 宏观指标（FRED）</div>
-      ${rows}
-      <div class="fetched-at">采集于 ${fmtTime(data.fetched_at)}</div>`;
-  }
-
-  function renderNews(data) {
-    const biasClass = (b) => b === 'western' ? 'bias-west' : b === 'eastern' ? 'bias-east' : 'bias-unknown';
-    const biasLabel = (b) => b === 'western' ? '西方' : b === 'eastern' ? '东方' : '未知';
-
-    const articles = data.articles.slice(0, 20).map(a => `
-      <div class="article-item">
-        <div class="article-title">
-          <a href="${a.url}" target="_blank" style="color:inherit;text-decoration:none;">${a.title}</a>
-        </div>
-        <div class="article-meta">
-          <span>${a.source_domain}</span>
-          <span class="${biasClass(a.media_bias)}">${biasLabel(a.media_bias)}视角</span>
-          <span>${a.language}</span>
-        </div>
-      </div>`).join('');
-
-    return `
-      <div class="card-title">🌐 全球新闻（RSS）</div>
-      <div class="news-balance">
-        <span class="badge-west">西方 ${data.western_count}</span>
-        <span class="badge-east">东方 ${data.eastern_count}</span>
-        <span style="color:#64748b;font-size:0.75rem;">共 ${data.articles.length} 篇</span>
-      </div>
-      ${articles}
-      <div class="fetched-at">采集于 ${fmtTime(data.fetched_at)}</div>`;
-  }
-
-  async function collect() {
-    const btn = document.getElementById('btn-collect');
-    const status = document.getElementById('status');
-    const grid = document.getElementById('grid');
-
-    const sources = ['market', 'macro', 'news']
-      .filter(s => document.getElementById(`chk-${s}`).checked)
-      .join(',');
-
-    if (!sources) {
-      status.className = 'error';
-      status.textContent = '请至少选择一个数据源';
-      return;
+    // Format timestamp
+    function fmtTime(iso) {
+      const d = new Date(iso);
+      return d.toLocaleString('zh-CN', {
+        timeZone: 'Asia/Shanghai',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
     }
 
-    btn.disabled = true;
-    status.className = 'loading';
-    status.textContent = '正在采集数据，请稍候…（市场和宏观数据约需 10-20 秒）';
-    grid.innerHTML = '';
+    // VIX classification
+    function vixClass(vix) {
+      if (vix < 15) return 'low';
+      if (vix < 20) return 'medium';
+      if (vix < 30) return 'high';
+      return 'extreme';
+    }
 
-    try {
-      const res = await fetch(`/api/collect?sources=${sources}`);
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.detail?.error || `HTTP ${res.status}`);
+    function vixLabel(vix) {
+      if (vix < 15) return '平静';
+      if (vix < 20) return '温和';
+      if (vix < 30) return '紧张';
+      return '恐慌';
+    }
+
+    // Render VIX Panel
+    function renderVIX(data) {
+      const cls = vixClass(data.vix);
+      return `
+        <div class="panel vix-panel">
+          <div class="panel-header">
+            <div class="panel-title">📊 偏斜率指数 VIX</div>
+            <div class="panel-badge">${fmtTime(data.fetched_at)}</div>
+          </div>
+          <div class="panel-content">
+            <div class="vix-grid">
+              <div class="vix-card">
+                <div class="vix-value ${cls}">${data.vix.toFixed(1)}</div>
+                <div class="vix-label">VIX · ${vixLabel(data.vix)}</div>
+              </div>
+              ${data.indices.slice(0, 3).map(idx => `
+                <div class="vix-card">
+                  <div class="vix-value ${idx.change_pct >= 0 ? 'positive' : 'negative'}">${idx.change_pct >= 0 ? '+' : ''}${idx.change_pct.toFixed(2)}%</div>
+                  <div class="vix-label">${idx.name}</div>
+                </div>
+              `).join('')}
+            </divdiv>
+          </div>
+        </div>
+      `;
+    }
+
+    // Render Market Panel
+    function renderMarket(data) {
+      const renderTable = (items, title) => `
+        <div class="panel">
+          <div class="panel-header">
+            <div class="panel-title">${title}</div>
+          </div>
+          <div class="panel-content">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>名称</th>
+                  <th>价格</th>
+                  <th>涨跌</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${items.map(item => `
+                  <tr>
+                    <td class="name">${item.name}</td>
+                    <td class="value">${item.price.toFixed(2)}</td>
+                    <td class="change ${item.change_pct >= 0 ? 'positive' : 'negative'}">
+                      ${item.change_pct >= 0 ? '+' : ''}${item.change_pct.toFixed(2)}%
+                    </td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      `;
+
+      return renderTable(data.indices, '📈 主要指数') +
+             renderTable(data.commodities, '💰 大宗商品') +
+             renderTable(data.fx_rates, '💱 汇率');
+    }
+
+    // Render Macro Panel
+    function renderMacro(data) {
+      return `
+        <div class="panel">
+          <div class="panel-header">
+            <div class="panel-title">🏦 宏观指标 FRED</div>
+            <div class="panel-badge">${data.series.length} 项</div>
+          </div>
+          <div class="panel-content">
+            <div class="macro-grid">
+              ${data.series.map(s => `
+                <div class="macro-item">
+                  <div class="macro-name">${s.name}</div>
+                  <div>
+                    <span class="macro-value">${s.value.toFixed(2)}</span>
+                    <span class="macro-unit">${s.unit}</span>
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    // Render News Panel
+    function renderNews(data) {
+      const biasClass = (b) => b;
+      const biasLabel = (b) => {
+        if (b === 'western') return '西方';
+        if (b === 'eastern') return '东方';
+        return '中立';
+      };
+
+      const articles = data.articles.slice(0, 20).map(a => `
+        <div class="news-item ${a.media_bias}">
+          <div class="news-title">
+            <a href="${a.url}" target="_blank">${a.title}</a>
+          </div>
+          <div class="news-meta">
+            <span>${a.source_domain}</span>
+            <span>·</span>
+            <span>${biasLabel(a.media_bias)}</span>
+          </div>
+        </div>
+      `).join('');
+
+      return `
+        <div class="panel news-panel">
+          <div class="panel-header">
+            <div class="panel-title">🌐 全球新闻 RSS</div>
+            <div class="panel-badge">${data.articles.length} 篇</div>
+          </div>
+          <div class="panel-content">
+            <div class="news-balance">
+              <div class="balance-badge western">西方 ${data.western_count}</div>
+              <div class="balance-badge eastern">东方 ${data.eastern_count}</div>
+              <div class="balance-badge neutral">中立 ${data.articles.length - data.western_count - data.eastern_count}</div>
+            </div>
+            <div class="news-list">
+              ${articles}
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    async function collect() {
+      const btn = document.getElementById('btn-collect');
+      const status = document.getElementById('status');
+      const dashboard = document.getElementById('dashboard');
+
+      const sources = ['market', 'macro', 'news']
+        .filter(s => document.getElementById(`chk-${s}`).checked)
+        .join(',');
+
+      if (!sources) {
+        status.className = 'status error';
+        status.textContent = '⚠ 请选择数据源';
+        return;
       }
-      const data = await res.json();
 
-      const cards = [];
-      if (data.market) cards.push(`<div class="card">${renderMarket(data.market)}</div>`);
-      if (data.macro)  cards.push(`<div class="card">${renderMacro(data.macro)}</div>`);
-      if (data.news)   cards.push(`<div class="card">${renderNews(data.news)}</div>`);
-      grid.innerHTML = cards.join('');
+      btn.disabled = true;
+      status.className = 'status loading';
+      status.textContent = '⏳ 采集数据中...';
+      dashboard.innerHTML = '';
 
-      status.className = 'done';
-      status.textContent = `✓ 采集完成 · ${new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}`;
-    } catch (e) {
-      status.className = 'error';
-      status.textContent = `采集失败：${e.message}`;
-      grid.innerHTML = '<div class="card"><div class="placeholder">采集出错，请查看控制台日志</div></div>';
-    } finally {
-      btn.disabled = false;
+      try {
+        const res = await fetch(`/api/collect?sources=${sources}`);
+        if (!res.ok) {
+          const err = await res.json();
+          throw new Error(err.detail?.error || `HTTP ${res.status}`);
+        }
+        const data = await res.json();
+
+        const panels = [];
+        if (data.market) {
+          panels.push(renderVIX(data.market));
+          panels.push(renderMarket(data.market));
+        }
+        if (data.macro) panels.push(renderMacro(data.macro));
+        if (data.news) panels.push(renderNews(data.news));
+
+        dashboard.innerHTML = panels.join('');
+
+        status.className = 'status done';
+        status.textContent = `✓ 采集完成`;
+      } catch (e) {
+        status.className = 'status error';
+        status.textContent = `✗ ${e.message}`;
+      } finally {
+        btn.disabled = false;
+      }
     }
-  }
-</script>
+  </script>
 </body>
 </html>

@@ -32,6 +32,11 @@ RSS_FEEDS: list[tuple[str, MediaBias, str]] = [
     ("http://www.xinhuanet.com/english/rss_eng.htm",           MediaBias.EASTERN, "xinhuanet.com"),
     ("https://www3.nhk.or.jp/nhkworld/data/en/news/backstory/rss.xml",
                                                                MediaBias.EASTERN, "nhk.or.jp"),
+    # Military / Defense news
+    ("https://www.defensenews.com/arc/outbound-feed/rss/", MediaBias.WESTERN, "defensenews.com"),
+    ("https://www.janes.com/rss/defence-weekly",    MediaBias.WESTERN, "janes.com"),
+    ("https://www.militarytimes.com/feed/",     MediaBias.WESTERN, "militarytimes.com"),
+    ("https://warontherocks.com/feed/",          MediaBias.NEUTRAL,  "warontherocks.com"),
     # High-signal official sources (low volume, authoritative)
     ("https://www.federalreserve.gov/feeds/press_all.xml",     MediaBias.NEUTRAL, "federalreserve.gov"),
 ]
