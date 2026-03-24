@@ -45,7 +45,7 @@ Python 3.10+ / FastAPI / DeepSeek（`deepseek-chat`）/ yfinance / FRED / GDELT
 ## UI 设计
 
 参考彭博终端（信息密度）+ 苹果股市 App（中英混排）；完整上下文见 `.impeccable.md`。
-色彩只说事实：绿=涨/安全，红=跌/危险；结论前置；圆角≤12px；无意义动效禁止。
+色彩只说事实：红=涨/危险，绿=跌/安全（中国市场习惯）；结论前置；圆角≤12px；无意义动效禁止。
 
 ## 禁止
 

@@ -44,6 +44,20 @@ RSS_FEEDS: list[tuple[str, MediaBias, str]] = [
 # Include articles published within this window; older ones are discarded.
 RECENCY_HOURS: int = 24
 
+# Keywords to filter out non-macro news (sports, entertainment, lifestyle, etc.)
+EXCLUDED_KEYWORDS: frozenset[str] = frozenset({
+    "sport", "football", "basketball", "soccer", "tennis", "golf", "cricket", "rugby",
+    "olympics", "world cup", "championship", "league", "match", "game",
+    "entertainment", "celebrity", "movie", "film", "music", "tv", "television",
+    "star", "actor", "actress", "singer", "band",
+    "dog", "cat", "pet", "animal", "puppy", "kitten",
+    "recipe", "food", "cooking", "restaurant",
+    "fashion", "style", "beauty", "makeup",
+    "travel", "vacation", "hotel", "tourism",
+    "game", "gaming", "video game",
+    "weather", "forecast",
+})
+
 
 class NewsCollector:
     """Collects global news articles from curated RSS feeds with East/West perspective tagging."""
@@ -70,6 +84,12 @@ class NewsCollector:
             published_parsed = getattr(entry, "published_parsed", None)
             if published_parsed is None:
                 logger.debug("Skipping entry without published date: %s", getattr(entry, "link", ""))
+                continue
+
+            # Filter out non-macro news by keyword
+            title = getattr(entry, "title", "").lower()
+            if any(kw in title for kw in EXCLUDED_KEYWORDS):
+                logger.debug("Filtered out non-macro article: %s", title[:80])
                 continue
 
             try:

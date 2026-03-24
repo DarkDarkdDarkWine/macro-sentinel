@@ -16,21 +16,52 @@ logger = logging.getLogger(__name__)
 # Symbols to collect, grouped by category.
 # Extend these lists to add more instruments without changing collector logic.
 INDEX_SYMBOLS: list[tuple[str, str]] = [
+    # Americas
     ("^GSPC", "标普500"),
     ("^IXIC", "纳斯达克"),
+    ("^DJI", "道琼斯"),
+    # Europe
+    ("^FTSE", "富时100"),
+    ("^GDAXI", "DAX"),
+    ("^FCHI", "CAC40"),
+    # Asia-Pacific
     ("^HSI", "恒生指数"),
     ("000001.SS", "上证指数"),
+    ("399001.SZ", "深证成指"),
     ("^N225", "日经225"),
+    ("^KS11", "韩国KOSPI"),
+    ("^AXJO", "澳洲ASX200"),
+    # Emerging Markets
+    ("^BSESN", "印度SENSEX"),
+    ("^BVSP", "巴西BOVESPA"),
 ]
 
 COMMODITY_SYMBOLS: list[tuple[str, str]] = [
+    # Precious Metals
     ("GC=F", "黄金"),
-    ("CL=F", "原油(WTI)"),
+    ("SI=F", "白银"),
+    ("PL=F", "铂金"),
+    ("PA=F", "钯金"),
+    # Base Metals
+    ("HG=F", "铜"),
+    ("ALI=F", "铝"),
+    ("ZINC=F", "锌"),
+    # Energy - Crude Oil
+    ("CL=F", "WTI原油"),
+    ("BZ=F", "布伦特原油"),
+    # Energy - Gas
+    ("NG=F", "天然气"),
+    # Agriculture
+    ("ZC=F", "玉米"),
+    ("ZS=F", "大豆"),
+    ("KE=F", "小麦"),
 ]
 
 FX_SYMBOLS: list[tuple[str, str]] = [
     ("USDCNY=X", "美元/人民币"),
     ("EURUSD=X", "欧元/美元"),
+    ("USDJPY=X", "美元/日元"),
+    ("GBPUSD=X", "英镑/美元"),
     ("DX-Y.NYB", "美元指数"),
 ]
 
