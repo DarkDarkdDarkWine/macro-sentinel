@@ -9,15 +9,6 @@ from src.collectors.market import MarketCollector
 from src.models.market import MarketSnapshot
 
 
-@pytest.fixture
-def mock_ticker_data() -> dict:
-    """Minimal yfinance Ticker.fast_info mock payload."""
-    return {
-        "lastPrice": 5200.0,
-        "previousClose": 5100.0,
-    }
-
-
 @patch("src.collectors.market.yf.Ticker")
 def test_fetch_vix_returns_float(mock_ticker_cls: MagicMock) -> None:
     """fetch_vix() should return a positive float representing the VIX level."""
@@ -33,6 +24,18 @@ def test_fetch_vix_returns_float(mock_ticker_cls: MagicMock) -> None:
 
 
 @patch("src.collectors.market.yf.Ticker")
+def test_fetch_vix_raises_on_non_positive_value(mock_ticker_cls: MagicMock) -> None:
+    """fetch_vix() should raise ValueError when the returned VIX value is zero or negative."""
+    mock_info = MagicMock()
+    mock_info.last_price = 0.0
+    mock_ticker_cls.return_value.fast_info = mock_info
+
+    collector = MarketCollector()
+    with pytest.raises(ValueError, match="VIX"):
+        collector.fetch_vix()
+
+
+@patch("src.collectors.market.yf.Ticker")
 def test_fetch_index_returns_snapshot(mock_ticker_cls: MagicMock) -> None:
     """fetch_index() should return an IndexSnapshot with correct symbol and price."""
     mock_info = MagicMock()
@@ -41,10 +44,10 @@ def test_fetch_index_returns_snapshot(mock_ticker_cls: MagicMock) -> None:
     mock_ticker_cls.return_value.fast_info = mock_info
 
     collector = MarketCollector()
-    snapshot = collector.fetch_index("^GSPC", "S&P 500")
+    snapshot = collector.fetch_index("^GSPC", "标普500")
 
     assert snapshot.symbol == "^GSPC"
-    assert snapshot.name == "S&P 500"
+    assert snapshot.name == "标普500"
     assert snapshot.price == 5200.0
     assert round(snapshot.change_pct, 2) == round((5200.0 - 5100.0) / 5100.0 * 100, 2)
 
@@ -78,4 +81,4 @@ def test_fetch_index_raises_on_zero_previous_close(mock_ticker_cls: MagicMock) -
 
     collector = MarketCollector()
     with pytest.raises(ValueError, match="previous_close"):
-        collector.fetch_index("^GSPC", "S&P 500")
+        collector.fetch_index("^GSPC", "标普500")

@@ -9,6 +9,9 @@ from datetime import datetime, timezone
 
 from fredapi import Fred
 
+# Timeout in seconds for all FRED HTTP requests.
+REQUEST_TIMEOUT: int = 30
+
 from src.models.macro import MacroSeries, MacroSnapshot
 
 logger = logging.getLogger(__name__)
@@ -33,7 +36,8 @@ class MacroCollector:
         Args:
             api_key: FRED API key obtained from fredaccount.stlouisfed.org.
         """
-        self._fred = Fred(api_key=api_key)
+        # request_params is forwarded to every underlying requests call by fredapi.
+        self._fred = Fred(api_key=api_key, request_params={"timeout": REQUEST_TIMEOUT})
 
     def fetch_series(self, series_id: str, name: str, unit: str) -> MacroSeries:
         """Fetch the latest observation for a single FRED series.

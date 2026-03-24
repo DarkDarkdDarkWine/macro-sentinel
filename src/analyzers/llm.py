@@ -119,6 +119,6 @@ def translate_titles(client: LLMClient, titles: list[str]) -> list[str]:
         logger.info("Translated %d titles via DeepSeek", len(titles))
         return translated
 
-    except (json.JSONDecodeError, Exception) as exc:
+    except (json.JSONDecodeError, openai.OpenAIError) as exc:
         logger.warning("Translation failed (%s: %s) — using original titles", type(exc).__name__, exc)
         return titles

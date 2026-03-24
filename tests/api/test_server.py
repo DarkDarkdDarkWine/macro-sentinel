@@ -1,11 +1,13 @@
 """Tests for the FastAPI dashboard server."""
 
+import os
 from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
 
+import src.api.server as server_module
 from src.api.server import app
 from src.models.macro import MacroSeries, MacroSnapshot
 from src.models.market import IndexSnapshot, MarketSnapshot
@@ -21,9 +23,9 @@ def _make_index(symbol: str, name: str) -> IndexSnapshot:
 MOCK_MARKET = MarketSnapshot(
     fetched_at=NOW,
     vix=18.5,
-    indices=[_make_index("^GSPC", "S&P 500"), _make_index("000001.SS", "Shanghai")],
-    commodities=[_make_index("GC=F", "Gold")],
-    fx_rates=[_make_index("USDCNY=X", "USD/CNY")],
+    indices=[_make_index("^GSPC", "标普500"), _make_index("000001.SS", "上证指数")],
+    commodities=[_make_index("GC=F", "黄金")],
+    fx_rates=[_make_index("USDCNY=X", "美元/人民币")],
 )
 
 MOCK_MACRO = MacroSnapshot(
@@ -31,9 +33,9 @@ MOCK_MACRO = MacroSnapshot(
     series=[
         MacroSeries(
             series_id="FEDFUNDS",
-            name="Federal Funds Rate",
+            name="联邦基金利率",
             value=5.33,
-            unit="Percent",
+            unit="%",
             observation_date=NOW.date(),
             fetched_at=NOW,
         )
@@ -66,6 +68,12 @@ MOCK_NEWS = NewsSnapshot(
 )
 
 
+@pytest.fixture(autouse=True)
+def clear_cache() -> None:
+    """Clear the in-memory cache before every test to prevent state leakage."""
+    server_module._cache.clear()
+
+
 @pytest.fixture
 def client() -> TestClient:
     return TestClient(app)
@@ -92,9 +100,6 @@ def test_collect_all_returns_combined_data(
     client: TestClient,
 ) -> None:
     """GET /api/collect should return market, macro, and news data combined."""
-    import src.api.server as server_module
-
-    server_module._cache.clear()
     mock_market_cls.return_value.collect.return_value = MOCK_MARKET
     mock_macro_cls.return_value.collect.return_value = MOCK_MACRO
     mock_news_cls.return_value.collect.return_value = MOCK_NEWS
@@ -112,6 +117,26 @@ def test_collect_all_returns_combined_data(
     assert len(data["news"]["articles"]) == 2
 
 
+@patch("src.api.server.LLMClient")
+@patch("src.api.server.translate_titles")
+@patch("src.api.server.NewsCollector")
+def test_collect_news_titles_are_translated(
+    mock_news_cls: MagicMock,
+    mock_translate: MagicMock,
+    mock_llm_cls: MagicMock,
+    client: TestClient,
+) -> None:
+    """translate_titles() output should appear in /api/collect news articles."""
+    mock_news_cls.return_value.collect.return_value = MOCK_NEWS
+    mock_translate.return_value = ["全球紧张局势升级", "经济分析"]
+
+    response = client.get("/api/collect?sources=news")
+    assert response.status_code == 200
+
+    titles = [a["title"] for a in response.json()["news"]["articles"]]
+    assert titles == ["全球紧张局势升级", "经济分析"]
+
+
 @patch("src.api.server.MarketCollector")
 @patch("src.api.server.MacroCollector")
 @patch("src.api.server.NewsCollector")
@@ -122,9 +147,6 @@ def test_collect_market_only(
     client: TestClient,
 ) -> None:
     """GET /api/collect?sources=market should return only market data."""
-    import src.api.server as server_module
-
-    server_module._cache.clear()
     mock_market_cls.return_value.collect.return_value = MOCK_MARKET
 
     response = client.get("/api/collect?sources=market")
@@ -134,6 +156,18 @@ def test_collect_market_only(
     assert "market" in data
     assert "macro" not in data
     assert "news" not in data
+
+
+def test_collect_macro_returns_503_when_fred_api_key_missing(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """GET /api/collect?sources=macro should return 503 when FRED_API_KEY is not set."""
+    monkeypatch.delenv("FRED_API_KEY", raising=False)
+
+    response = client.get("/api/collect?sources=macro")
+    assert response.status_code == 503
+    assert "FRED_API_KEY" in response.json()["detail"]["error"]
 
 
 @patch("src.api.server.LLMClient")
@@ -146,9 +180,6 @@ def test_collect_news_returns_cached_result_within_ttl(
     client: TestClient,
 ) -> None:
     """Second /api/collect?sources=news call within TTL should return cached data."""
-    import src.api.server as server_module
-
-    server_module._cache.clear()
     mock_news_cls.return_value.collect.return_value = MOCK_NEWS
     mock_translate.return_value = [a.title for a in MOCK_NEWS.articles]
 
@@ -158,7 +189,7 @@ def test_collect_news_returns_cached_result_within_ttl(
     r2 = client.get("/api/collect?sources=news")
     assert r2.status_code == 200
     assert r2.json() == r1.json()
-    assert mock_news_cls.return_value.collect.call_count == 1  # only fetched once
+    assert mock_news_cls.return_value.collect.call_count == 1
 
 
 @patch("src.api.server.LLMClient")
@@ -173,9 +204,6 @@ def test_collect_news_refetches_after_ttl_expires(
     client: TestClient,
 ) -> None:
     """After TTL expires, /api/collect?sources=news should call the collector again."""
-    import src.api.server as server_module
-
-    server_module._cache.clear()
     mock_news_cls.return_value.collect.return_value = MOCK_NEWS
     mock_translate.return_value = [a.title for a in MOCK_NEWS.articles]
     mock_time.time.return_value = 0.0

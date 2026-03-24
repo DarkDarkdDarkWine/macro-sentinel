@@ -24,10 +24,14 @@ RETRY_BACKOFF_SECONDS: float = 5.0  # wait time doubles each retry
 
 GDELT_API_URL = "https://api.gdeltproject.org/api/v2/doc/doc"
 
-# Return only articles from the last 24 hours so results stay current.
+# Primary timespan: return only articles from the last 24 hours.
 # GDELT's default searches its entire multi-year archive sorted by relevance,
 # which causes stale articles to surface ahead of breaking news.
 GDELT_TIMESPAN: str = "1d"
+
+# Fallback timespan used when the primary window returns zero articles
+# (e.g., low news volume, weekend, or API indexing lag).
+GDELT_FALLBACK_TIMESPAN: str = "7d"
 
 # Domains associated with a predominantly western editorial perspective.
 # This list is intentionally not exhaustive — unknown domains default to UNKNOWN.
@@ -131,11 +135,50 @@ class NewsCollector:
         # Unreachable, but satisfies type checker
         raise RuntimeError("Retry loop exited unexpectedly")
 
+    def _fetch_raw_articles(self, query: str, max_records: int, timespan: str) -> list[dict]:
+        """Fetch raw article dicts from GDELT for the given timespan.
+
+        Args:
+            query: Free-text search query.
+            max_records: Maximum number of results to request.
+            timespan: GDELT timespan string, e.g. '1d' or '7d'.
+
+        Returns:
+            List of raw article dicts; empty list on parse failure or no results.
+
+        Raises:
+            requests.exceptions.HTTPError: On non-429 HTTP errors after retries exhausted.
+        """
+        params = {
+            "query": query,
+            "mode": "artlist",
+            "maxrecords": max_records,
+            "format": "json",
+            "sort": "DateDesc",
+            "timespan": timespan,
+        }
+
+        response = self._get_with_retry(GDELT_API_URL, params=params)
+
+        # GDELT occasionally returns HTTP 200 with an empty body when no articles
+        # match the query or the service is under load.
+        try:
+            return response.json().get("articles", [])
+        except ValueError:
+            # Log first 200 chars of body to aid future diagnosis of the root cause.
+            body_preview = response.text[:200] if response.text else "<empty>"
+            logger.warning(
+                "GDELT returned non-JSON body for query '%s' timespan=%s: %s",
+                query, timespan, body_preview,
+            )
+            return []
+
     def collect(self, query: str, max_records: int = 50) -> NewsSnapshot:
         """Fetch news articles matching the query from GDELT DOC 2.0 API.
 
-        Both western and eastern sources are fetched in a single request;
-        bias tagging is applied post-fetch to ensure balanced coverage.
+        Tries the primary timespan (GDELT_TIMESPAN) first. If zero articles are
+        returned — which happens when there is a low news volume or indexing lag —
+        retries with the fallback timespan (GDELT_FALLBACK_TIMESPAN) before giving up.
 
         Args:
             query: Free-text search query, e.g. 'geopolitical risk trade war'.
@@ -145,43 +188,45 @@ class NewsCollector:
             NewsSnapshot with articles tagged by media perspective.
 
         Raises:
-            Exception: If the GDELT API returns an HTTP error.
+            requests.exceptions.HTTPError: If the GDELT API returns an HTTP error.
         """
         logger.info("Fetching GDELT news for query: '%s'", query)
 
-        params = {
-            "query": query,
-            "mode": "artlist",
-            "maxrecords": max_records,
-            "format": "json",
-            "sort": "DateDesc",    # most recent articles first
-            "timespan": GDELT_TIMESPAN,  # restrict to last 24 hours
-        }
+        raw_articles = self._fetch_raw_articles(query, max_records, GDELT_TIMESPAN)
 
-        response = self._get_with_retry(GDELT_API_URL, params=params)
-        response.raise_for_status()
-
-        # GDELT occasionally returns HTTP 200 with an empty body when no articles
-        # match the query or the service is under load. Treat this as zero results
-        # rather than letting JSONDecodeError propagate to the caller.
-        try:
-            raw_articles: list[dict] = response.json().get("articles", [])
-        except ValueError:
-            logger.warning("GDELT returned empty or non-JSON body for query '%s'", query)
-            raw_articles = []
+        if not raw_articles:
+            logger.warning(
+                "No articles from GDELT with timespan=%s, retrying with timespan=%s",
+                GDELT_TIMESPAN, GDELT_FALLBACK_TIMESPAN,
+            )
+            raw_articles = self._fetch_raw_articles(query, max_records, GDELT_FALLBACK_TIMESPAN)
 
         articles: list[NewsArticle] = []
         for item in raw_articles:
+            # Skip articles with missing or malformed date — one bad record must not
+            # abort the entire batch; log and continue instead of raising.
+            raw_date = item.get("seendate", "")
+            if not raw_date:
+                logger.warning("Skipping article with missing seendate: %s", item.get("url"))
+                continue
+            try:
+                published_at = _parse_gdelt_date(raw_date)
+            except ValueError:
+                logger.warning(
+                    "Skipping article with unparseable seendate '%s': %s",
+                    raw_date, item.get("url"),
+                )
+                continue
+
             domain = item.get("domain", "")
-            bias = _classify_bias(domain)
             articles.append(
                 NewsArticle(
                     title=item.get("title", ""),
                     url=item.get("url", ""),
                     source_domain=domain,
-                    published_at=_parse_gdelt_date(item["seendate"]),
+                    published_at=published_at,
                     language=item.get("language", "unknown"),
-                    media_bias=bias,
+                    media_bias=_classify_bias(domain),
                 )
             )
 

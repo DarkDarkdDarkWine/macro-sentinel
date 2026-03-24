@@ -28,7 +28,7 @@ app = FastAPI(title="Macro Sentinel", version="0.1.0")
 # than explicit Boolean syntax across API versions.
 DEFAULT_NEWS_QUERY = (
     "war conflict sanctions geopolitical inflation recession"
-    " \"interest rate\" \"central bank\" \"trade war\" tariff economy"
+    " interest rate central bank trade tariff economy"
 )
 
 # Cache TTL in seconds — GDELT rate-limits aggressively; reuse results within this window.
@@ -104,6 +104,11 @@ def collect(
 
         if "macro" in requested:
             api_key = os.environ.get("FRED_API_KEY", "")
+            if not api_key:
+                raise HTTPException(
+                    status_code=503,
+                    detail={"error": "FRED_API_KEY environment variable not set"},
+                )
             result["macro"] = _cached_collect(
                 "macro",
                 lambda: MacroCollector(api_key=api_key).collect().model_dump(mode="json"),
@@ -118,12 +123,20 @@ def collect(
                     llm = LLMClient(api_key=deepseek_key)
                     titles = [a.title for a in snapshot.articles]
                     translated = translate_titles(llm, titles)
-                    for article, zh_title in zip(snapshot.articles, translated):
-                        article.title = zh_title
+                    # Build an immutable copy with translated titles instead of mutating
+                    # live model objects — preserves Pydantic model integrity.
+                    snapshot = snapshot.model_copy(update={
+                        "articles": [
+                            article.model_copy(update={"title": zh})
+                            for article, zh in zip(snapshot.articles, translated)
+                        ]
+                    })
                 return snapshot.model_dump(mode="json")
 
             result["news"] = _cached_collect("news", _collect_and_translate_news)
 
+    except HTTPException:
+        raise  # propagate 503 / other HTTP errors from key-missing checks
     except Exception as exc:
         logger.exception("Collector failed: %s", exc)
         raise HTTPException(status_code=500, detail={"error": str(exc)}) from exc

@@ -3,6 +3,7 @@
 import json
 from unittest.mock import MagicMock, patch
 
+import openai
 import pytest
 
 from src.analyzers.llm import LLMClient, translate_titles
@@ -91,12 +92,22 @@ def test_translate_titles_returns_empty_list_for_empty_input() -> None:
     client.chat.assert_not_called()
 
 
-def test_translate_titles_returns_originals_on_llm_exception() -> None:
-    """translate_titles() should fall back to originals when LLM raises."""
+def test_translate_titles_returns_originals_on_openai_error() -> None:
+    """translate_titles() should fall back to originals on an openai.OpenAIError."""
     titles = ["Breaking news"]
     client = MagicMock(spec=LLMClient)
-    client.chat.side_effect = RuntimeError("timeout")
+    client.chat.side_effect = openai.APIConnectionError(request=MagicMock())
 
     result = translate_titles(client, titles)
 
     assert result == titles
+
+
+def test_translate_titles_propagates_programming_errors() -> None:
+    """translate_titles() must NOT swallow AttributeError or other programmer mistakes."""
+    titles = ["Some title"]
+    client = MagicMock(spec=LLMClient)
+    client.chat.side_effect = AttributeError("wrong attribute")
+
+    with pytest.raises(AttributeError):
+        translate_titles(client, titles)

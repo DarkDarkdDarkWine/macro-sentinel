@@ -4,100 +4,53 @@
 
 ## 技术栈
 
-- Python 3.10+
-- LLM：DeepSeek API（`deepseek-chat`）
-- 市场数据：yfinance
-- 新闻数据：GDELT / NewsAPI
-- 部署：本地 + NAS Docker（amd64 / arm64）
+Python 3.10+ / FastAPI / DeepSeek（`deepseek-chat`）/ yfinance / FRED / GDELT
+部署：本地 + NAS Docker（amd64 / arm64）
 
 ## 目录结构
 
-- `src/collectors/` — 数据采集（市场数据、新闻）
-- `src/analyzers/` — AI 分析引擎（LLM 调用、信号生成）
-- `src/reporters/` — 报告输出（格式化、推送）
-- `src/models/` — 数据模型（Pydantic）
-- `tests/` — 测试（镜像 src/ 结构）
-- `scripts/` — 独立运行脚本（手动触发、调试用）
+`src/collectors/` 采集 · `src/analyzers/` 分析 · `src/reporters/` 报告 · `src/models/` Pydantic 模型
+`tests/` 镜像 src/ 结构 · `scripts/` 独立脚本
 
-## 常用命令
+## 工作流触发
 
-- 安装依赖：`pip install -r requirements.txt`
-- 运行：`python -m src.main`
-- 测试：`pytest`
-- Lint：`ruff check .`
-- 格式化：`ruff format .`
-- 类型检查：`mypy src/`
+| 场景 | 使用技能 |
+|------|---------|
+| 新功能 >2 文件 | `superpowers:writing-plans` → 确认后再编码 |
+| 实现阶段 | `superpowers:test-driven-development`（Red-Green-Refactor，Iron Law 无例外）|
+| 任何 bug / 测试失败 | `superpowers:systematic-debugging`（先找根因，禁止猜测修复）|
+| 宣布完成前 | `superpowers:verification-before-completion`；顺序：`mypy src/` → `pytest` → `ruff check .` |
+| 功能完成后 | `superpowers:requesting-code-review` |
+| 多个独立任务 | `superpowers:dispatching-parallel-agents` |
 
-## 验证流程
-
-每次改动后按顺序执行：
-1. `mypy src/` — 修复类型错误
-2. `pytest` — 修复失败的测试
-3. `ruff check .` — 修复 lint 问题
-
-## TDD
-
-- 先写测试，再写实现，不接受没有测试覆盖的新功能
-- 需求变更时，先更新测试用例，确认测试失败后，再开始修改实现
-- 测试文件与源文件一一对应：`src/collectors/news.py` → `tests/collectors/test_news.py`
-- 外部 API（DeepSeek、yfinance、NewsAPI）一律 mock，不在测试中发真实请求
-- 每个测试只测一件事，测试名称说清楚场景：`test_fetch_vix_returns_float_on_success`
-- 功能编写完成后必须运行 `pytest` 确认全部通过才算完成，发现失败自动定位原因并修复，不等用户指出
+项目 TDD 补充：测试文件与源文件一一对应（`src/X.py` → `tests/X.py`）；外部 API 一律 mock。
 
 ## 约定
 
 - 所有数据结构用 Pydantic 模型定义
 - LLM 调用统一封装在 `src/analyzers/llm.py`，不在其他地方直接调用 DeepSeek API
-- 外部 API 调用加超时和重试，默认超时 30s
-- 敏感配置（API Key 等）通过环境变量读取，参考 `.env.example`
-- 日志用标准库 `logging`，不用 `print`
+- 外部 API 调用加超时（30s）和重试；敏感配置通过环境变量；日志用 `logging`
 
 ## AI 可读性
 
-代码将由其他 AI 进行审阅，必须保持高可读性和可扩展性：
-
-- 所有函数和类加 docstring，说明职责、参数、返回值和异常
-- 全量类型注解，包括函数签名和局部变量
-- 用具名常量替代魔法数字和魔法字符串
-- 每个函数只做一件事，超过 40 行考虑拆分
-- 模块边界清晰，依赖方向单一（collectors → analyzers → reporters），不反向依赖
-- 复杂逻辑用注释解释"为什么"，而不是"做了什么"
+代码将由其他 AI 审阅：所有函数/类加 docstring；全量类型注解；具名常量替代魔法值；
+函数超过 40 行考虑拆分；依赖方向单一（collectors → analyzers → reporters，不反向）。
 
 ## 新闻信源原则
 
-新闻内容存在媒体立场偏差，采集和分析时必须注意：
+- 同一事件必须覆盖东西方视角（Reuters/AP + 新华社/CGTN）
+- Prompt 中要求 LLM 标注信源立场，区分事实与观点
+- 市场数据是客观的；新闻只用来解释背景，不单独作为预测依据
 
-- 同一事件必须覆盖东西方视角（如：Reuters/AP + 新华社/CGTN）
-- Prompt 中明确要求 LLM 标注信息来源的可能立场，区分事实陈述和观点判断
-- 市场数据（价格、利率、指标）是客观的；新闻只用来解释背景，不单独作为预测依据
-- 不因信源立场过滤内容，让 LLM 综合多方视角后输出结论
+## UI 设计
+
+参考彭博终端（信息密度）+ 苹果股市 App（中英混排）；完整上下文见 `.impeccable.md`。
+色彩只说事实：绿=涨/安全，红=跌/危险；结论前置；圆角≤12px；无意义动效禁止。
 
 ## 禁止
 
-- 不硬编码 API Key
-- 不在 collectors 层做分析逻辑，只做数据获取
-- 不捕获裸 `Exception`，捕获具体异常类型
+不硬编码 API Key · 不在 collectors 层做分析逻辑 · 不捕获裸 `Exception`
 
-## 自我改进
+## 自我改进 & 提交规范
 
-每次用户纠正错误或调整方向后，主动更新本文件中的相关约定，避免下次重复同样的问题。
-
-## 提交规范
-
-每次 git commit 前，必须同步更新 README.md，确保开发进度、已完成功能、使用方式与代码保持一致。
-
-## UI 设计原则
-
-本工具为个人每日看盘使用，参考：彭博终端（信息密度）+ 苹果股市 App（中英混排优雅）。
-
-**核心原则：**
-
-1. **数据即界面** — 每个像素承载信息或服务于信息间距，无装饰元素
-2. **色彩只说事实** — 绿=上涨/安全，红=下跌/危险，黄=警戒，灰=中性。不因美观改变色彩语义，红绿系统不可变动
-3. **结论前置** — 风险评级/今日摘要在视口顶部，支撑数据在下方，用户不需要找结论
-4. **克制的专业感** — 不用动效吸引眼球，不用渐变/霓虹/游戏化元素，圆角≤12px
-5. **中英文一等公民** — 混排时视觉节奏统一，数字用 `font-variant-numeric: tabular-nums`
-
-**禁止：** Robinhood 彩虹配色、大面积渐变、霓虹发光、圆角>12px、无意义动效。
-
-完整设计上下文见 `.impeccable.md`。
+被用户纠正后主动更新本文件相关约定；每次 commit 前同步更新 README.md。
