@@ -148,3 +148,47 @@ def test_rss_feeds_constant_has_required_bias_coverage() -> None:
     biases = {bias for _, bias, _ in RSS_FEEDS}
     assert MediaBias.WESTERN in biases
     assert MediaBias.EASTERN in biases
+
+
+@patch("src.collectors.news.feedparser.parse")
+def test_excluded_keywords_do_not_filter_macro_content(mock_parse: MagicMock) -> None:
+    """Word-boundary matching must not filter macro-relevant titles that happen to contain
+    excluded substrings (e.g. 'petroleum' contains 'pet', 'start' contains 'star')."""
+    macro_titles = [
+        ("Petroleum prices surge on OPEC+ cuts", "https://bbc.co.uk/pet1"),
+        ("Fed starts new rate cycle", "https://bbc.co.uk/star1"),
+        ("GDP forecast revised upward", "https://bbc.co.uk/forecast1"),
+        ("Food inflation hits 5-year high", "https://bbc.co.uk/food1"),
+        ("Travel ban impacts airline stocks", "https://bbc.co.uk/travel1"),
+    ]
+    mock_parse.return_value = _make_feed([
+        _make_entry(title, url) for title, url in macro_titles
+    ])
+
+    snapshot = NewsCollector().collect("test")
+
+    collected_titles = {a.title for a in snapshot.articles}
+    for title, _ in macro_titles:
+        assert title in collected_titles, f"Macro article incorrectly filtered: {title!r}"
+
+
+@patch("src.collectors.news.feedparser.parse")
+def test_excluded_keywords_filter_sports_and_entertainment(mock_parse: MagicMock) -> None:
+    """Non-macro articles about sports/entertainment should be filtered out."""
+    from src.collectors.news import _EXCLUDED_PATTERN
+
+    noise_titles = [
+        "Champions League football results",
+        "Oscar nominations: best actor nominees",
+        "Tennis grand slam update",
+        "Celebrity gossip: singer announces tour",
+    ]
+    mock_parse.return_value = _make_feed([
+        _make_entry(title, f"https://bbc.co.uk/{i}") for i, title in enumerate(noise_titles)
+    ])
+
+    snapshot = NewsCollector().collect("test")
+
+    collected_titles = {a.title for a in snapshot.articles}
+    for title in noise_titles:
+        assert title not in collected_titles, f"Noise article should have been filtered: {title!r}"

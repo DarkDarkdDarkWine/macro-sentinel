@@ -42,10 +42,8 @@ COMMODITY_SYMBOLS: list[tuple[str, str]] = [
     ("SI=F", "白银"),
     ("PL=F", "铂金"),
     ("PA=F", "钯金"),
-    # Base Metals
+    # Base Metals (LME 铝/锌无 yfinance 标准合约，只保留 COMEX 铜)
     ("HG=F", "铜"),
-    ("ALI=F", "铝"),
-    ("ZINC=F", "锌"),
     # Energy - Crude Oil
     ("CL=F", "WTI原油"),
     ("BZ=F", "布伦特原油"),
@@ -131,9 +129,27 @@ class MarketCollector:
         logger.info("Collecting market snapshot at %s", fetched_at.isoformat())
 
         vix = self.fetch_vix()
-        indices = [self.fetch_index(sym, name) for sym, name in INDEX_SYMBOLS]
-        commodities = [self.fetch_index(sym, name) for sym, name in COMMODITY_SYMBOLS]
-        fx_rates = [self.fetch_index(sym, name) for sym, name in FX_SYMBOLS]
+
+        indices: list = []
+        for sym, name in INDEX_SYMBOLS:
+            try:
+                indices.append(self.fetch_index(sym, name))
+            except (ValueError, TypeError) as exc:
+                logger.warning("Skipping index %s (%s): %s", sym, name, exc)
+
+        commodities: list = []
+        for sym, name in COMMODITY_SYMBOLS:
+            try:
+                commodities.append(self.fetch_index(sym, name))
+            except (ValueError, TypeError) as exc:
+                logger.warning("Skipping commodity %s (%s): %s", sym, name, exc)
+
+        fx_rates: list = []
+        for sym, name in FX_SYMBOLS:
+            try:
+                fx_rates.append(self.fetch_index(sym, name))
+            except (ValueError, TypeError) as exc:
+                logger.warning("Skipping fx %s (%s): %s", sym, name, exc)
 
         return MarketSnapshot(
             fetched_at=fetched_at,

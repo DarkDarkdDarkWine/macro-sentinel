@@ -6,6 +6,7 @@ All HTTP calls are handled by feedparser — no requests imports here.
 """
 
 import logging
+import re
 from datetime import datetime, timezone, timedelta
 from time import mktime
 
@@ -44,19 +45,30 @@ RSS_FEEDS: list[tuple[str, MediaBias, str]] = [
 # Include articles published within this window; older ones are discarded.
 RECENCY_HOURS: int = 24
 
-# Keywords to filter out non-macro news (sports, entertainment, lifestyle, etc.)
-EXCLUDED_KEYWORDS: frozenset[str] = frozenset({
-    "sport", "football", "basketball", "soccer", "tennis", "golf", "cricket", "rugby",
-    "olympics", "world cup", "championship", "league", "match", "game",
-    "entertainment", "celebrity", "movie", "film", "music", "tv", "television",
-    "star", "actor", "actress", "singer", "band",
-    "dog", "cat", "pet", "animal", "puppy", "kitten",
-    "recipe", "food", "cooking", "restaurant",
-    "fashion", "style", "beauty", "makeup",
-    "travel", "vacation", "hotel", "tourism",
-    "game", "gaming", "video game",
-    "weather", "forecast",
+# Keywords to filter out non-macro news (sports, entertainment, lifestyle, etc.).
+# Uses whole-word regex matching (\b boundaries) to avoid false positives like
+# "pet" matching "petroleum" or "star" matching "start".
+# Do NOT add words that overlap with macro content:
+#   "forecast" (GDP/inflation forecasts), "food" (food prices/inflation),
+#   "travel" (travel ban), "weather" (commodity weather), "match"/"star"/"band"
+#   (common in financial headlines).
+_EXCLUDED_WORDS: frozenset[str] = frozenset({
+    # Sports
+    "sport", "sports", "football", "basketball", "soccer", "tennis", "golf",
+    "cricket", "rugby", "olympics", "championship", "gaming",
+    # Entertainment
+    "entertainment", "celebrity", "celebrities", "movie", "film", "music",
+    "television", "actor", "actress", "singer",
+    # Lifestyle
+    "puppy", "kitten", "recipe", "cooking", "restaurant", "makeup",
+    "vacation", "tourism",
+    # Phrases that need special handling are kept as multi-word below
 })
+
+# Compiled pattern for whole-word exclusion matching (case-insensitive applied at call site).
+_EXCLUDED_PATTERN: re.Pattern[str] = re.compile(
+    r"\b(?:" + "|".join(re.escape(w) for w in sorted(_EXCLUDED_WORDS)) + r")\b"
+)
 
 
 class NewsCollector:
@@ -86,9 +98,9 @@ class NewsCollector:
                 logger.debug("Skipping entry without published date: %s", getattr(entry, "link", ""))
                 continue
 
-            # Filter out non-macro news by keyword
+            # Filter out non-macro news using whole-word regex matching
             title = getattr(entry, "title", "").lower()
-            if any(kw in title for kw in EXCLUDED_KEYWORDS):
+            if _EXCLUDED_PATTERN.search(title):
                 logger.debug("Filtered out non-macro article: %s", title[:80])
                 continue
 

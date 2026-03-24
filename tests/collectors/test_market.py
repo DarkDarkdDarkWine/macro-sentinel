@@ -82,3 +82,34 @@ def test_fetch_index_raises_on_zero_previous_close(mock_ticker_cls: MagicMock) -
     collector = MarketCollector()
     with pytest.raises(ValueError, match="previous_close"):
         collector.fetch_index("^GSPC", "标普500")
+
+
+@patch("src.collectors.market.yf.Ticker")
+def test_collect_skips_bad_symbol_and_continues(mock_ticker_cls: MagicMock) -> None:
+    """collect() should skip symbols that raise ValueError/TypeError and still return a snapshot."""
+    call_count = 0
+
+    def ticker_side_effect(symbol: str) -> MagicMock:
+        nonlocal call_count
+        call_count += 1
+        mock = MagicMock()
+        if symbol == "^VIX":
+            mock.fast_info.last_price = 18.0
+            return mock
+        # First non-VIX symbol returns bad data (None → TypeError in float())
+        if call_count == 2:
+            mock.fast_info.last_price = None
+            mock.fast_info.previous_close = None
+            return mock
+        mock.fast_info.last_price = 100.0
+        mock.fast_info.previous_close = 95.0
+        return mock
+
+    mock_ticker_cls.side_effect = ticker_side_effect
+
+    collector = MarketCollector()
+    snapshot = collector.collect()
+
+    assert isinstance(snapshot, MarketSnapshot)
+    # At least some symbols should have succeeded
+    assert len(snapshot.indices) + len(snapshot.commodities) + len(snapshot.fx_rates) > 0
